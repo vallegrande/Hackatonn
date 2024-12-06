@@ -1,0 +1,116 @@
+<div class="flex h-screen">
+  <!-- Sidebar con scroll independiente -->
+  <div class="w-64 bg-[#1a1a1a] flex flex-col flex-shrink-0">
+    <div class="p-4">
+      <button 
+        (click)="clearConversation()"
+        class="w-full bg-[#333333] hover:bg-[#444444] text-white rounded p-3 mb-4">
+        Nueva conversación
+      </button>
+      <button 
+        (click)="toggleDeletedView()"
+        class="w-full bg-[#0077ff] hover:bg-[#0066cc] text-white rounded p-3">
+        {{ isShowingDeleted ? 'Ver activos' : 'Ver eliminados' }}
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto">
+      <div class="px-4">
+        <h2 class="text-[#a0a0a0] text-sm mb-2">{{ isShowingDeleted ? 'Conversaciones eliminadas' : 'Historial de conversaciones' }}</h2>
+        <div class="space-y-2">
+          <div *ngFor="let consulta of (isShowingDeleted ? deletedHistorial$ : historial$) | async"
+               class="cursor-pointer p-2 hover:bg-[#444444] rounded group">
+            <div class="flex justify-between items-center">
+              <div (click)="loadConversation(consulta.id)">
+                <p class="text-sm text-[#e0e0e0] truncate group-hover:text-white">{{ consulta.consulta }}</p>
+                <p class="text-xs text-[#b0b0b0]">{{ consulta.hora | date:'short' }}</p>
+              </div>
+              <div class="flex space-x-2">
+                <div class="relative">
+                  <button 
+                    *ngIf="consulta.id !== undefined"
+                    class="text-[#0077ff] hover:text-[#0066cc]" 
+                    (click)="toggleMenu(consulta.id)">
+                    ⋮
+                  </button>
+                  <div *ngIf="selectedMenuId === consulta.id" class="absolute right-0 mt-2 w-32 bg-[#333333] text-white rounded-md shadow-lg">
+                    <button *ngIf="!isShowingDeleted" (click)="startEditing(consulta)" class="w-full text-left px-4 py-2 hover:bg-[#444444]">Editar</button>
+                    <button *ngIf="!isShowingDeleted" (click)="deleteConversation(consulta.id)" class="w-full text-left px-4 py-2 hover:bg-[#444444] text-red-500">Eliminar</button>
+                    <button *ngIf="isShowingDeleted" (click)="restoreConversation(consulta.id)" class="w-full text-left px-4 py-2 hover:bg-[#444444] text-green-500">Restaurar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat principal -->
+  <div class="flex-1 flex flex-col bg-[#1a1a1a]">
+    <div *ngIf="(messages$ | async)?.length === 0" class="flex-1 flex items-center justify-center">
+      <div class="text-center p-8">
+        <h1 class="text-4xl font-bold mb-4 text-white">¡Bienvenido al Chat!</h1>
+        <p class="text-[#d0d0d0] mb-4">Selecciona una conversación del historial o inicia una nueva.</p>
+        <button 
+          (click)="clearConversation()"
+          class="bg-[#0077ff] hover:bg-[#0066cc] text-white rounded-lg px-6 py-3">
+          Iniciar nueva conversación
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="(messages$ | async)?.length !== 0" class="flex-1 overflow-y-auto" #scrollContainer>
+      <div class="max-w-3xl mx-auto">
+        <div *ngFor="let message of messages$ | async" 
+             [class.bg-[#333333]]="!message.isUser"
+             [class.bg-transparent]="message.isUser"
+             class="p-6 mb-4">
+          <div class="flex items-start">
+            <div class="w-8 h-8 rounded-full bg-[#444444] flex items-center justify-center mr-4">
+              {{ message.isUser ? 'U' : 'A' }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="whitespace-pre-wrap break-words text-[#e0e0e0]">{{ message.content }}</p>
+              <p class="text-xs text-[#b0b0b0] mt-2">
+                {{ message.timestamp | date:'medium' }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="border-t border-[#333333] p-4">
+      <div class="max-w-3xl mx-auto">
+        <div class="relative">
+          <input
+            [(ngModel)]="newMessage"
+            (keyup.enter)="sendMessage()"
+            [disabled]="isLoading"
+            class="w-full bg-[#333333] rounded-lg p-4 pr-24 focus:outline-none focus:ring-2 focus:ring-[#0077ff]"
+            placeholder="Escribe un mensaje..."
+          />
+          <button
+            (click)="sendMessage()"
+            [disabled]="isLoading || !newMessage.trim()"
+            class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-[#0077ff] hover:bg-[#0066cc] text-white rounded-lg px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            {{ isLoading ? 'Enviando...' : 'Enviar' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modo de edición -->
+<div *ngIf="editMode" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+  <div class="bg-[#1a1a1a] p-6 rounded-lg">
+    <h3 class="text-white text-xl mb-4">Editar conversación</h3>
+    <textarea [(ngModel)]="editContent" class="w-full bg-[#333333] text-white p-4 rounded-lg mb-4" rows="4"></textarea>
+    <div class="flex justify-end space-x-4">
+      <button (click)="saveEdit()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg">Guardar</button>
+      <button (click)="cancelEdit()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg">Cancelar</button>
+    </div>
+  </div>
+</div>
